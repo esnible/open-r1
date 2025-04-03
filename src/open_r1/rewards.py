@@ -16,6 +16,7 @@
 """Reward functions for GRPO training."""
 
 import asyncio
+import importlib
 import json
 import math
 import re
@@ -563,7 +564,35 @@ def get_reward_funcs(script_args) -> list[Callable]:
         ),
         "code_format": get_code_format_reward(language=script_args.code_language),
         "tag_count": tag_count_reward,
+            "python_package": get_python_package_reward(
+            module_name=script_args.python_module,
+            python_function=script_args.python_function,
+        ),
     }
     reward_funcs = [REWARD_FUNCS_REGISTRY[func] for func in script_args.reward_funcs]
 
     return reward_funcs
+
+def get_python_package_reward(
+    module_name: str = "missing",
+    python_function: str = "missing",
+):
+   def unknown_custom_reward(completions, solution, **kwargs):
+       raise ValueError(f"Unknown custom reward function {module_name}.{python_function}()")
+
+   if not module_name or not python_function:
+       return unknown_custom_reward
+
+   try:
+      mod = importlib.import_module(module_name)
+   except ModuleNotFoundError:
+       print(f"Custom reward function module {module_name} not found")
+       return unknown_custom_reward
+
+   try:
+       retval = getattr(mod, python_function)
+   except AttributeError:
+       print(f"Custom reward function {python_function} in {module_name} not found")
+       return unknown_custom_reward
+
+   return retval
